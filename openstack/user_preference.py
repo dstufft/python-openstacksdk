@@ -51,6 +51,8 @@ The resulting preference print out would look something like::
     service_type=identity,region=zion,version=v3
 """
 
+import pkg_resources
+
 import six
 
 from openstack.compute import compute_service
@@ -70,7 +72,7 @@ class UserPreference(object):
     ALL = "*"
     """Wildcard service identifier representing all services."""
 
-    def __init__(self):
+    def __init__(self, provider=None):
         """User preference for each service.
 
         Create a new :class:`~openstack.user_preference.UserPreference`
@@ -80,38 +82,43 @@ class UserPreference(object):
         """
         self._preferences = {}
         self._services = {}
-        """
-        NOTE(thowe): We should probably do something more clever here rather
-        than brute force create all the services.  Maybe use entry points
-        or something, but I'd like to leave that work for another commit.
-        """
-        serv = compute_service.ComputeService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = database_service.DatabaseService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = identity_service.IdentityService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = image_service.ImageService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = network_service.NetworkService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = object_store_service.ObjectStoreService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = orchestration_service.OrchestrationService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = keystore_service.KeystoreService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = telemetry_service.TelemetryService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
+        # Note(dstufft): There might be a stevedore way of doing this, I'm not
+        #                sure. For now I'll just use pkg_resources directly.
+        provider_services = pkg_resources.get_entry_map(
+            "python-openstacksdk",
+            "openstack.services",
+        )
+
+        if provider is not None:
+            if isinstance(provider, six.string_types):
+                # If a simple string is passed, then we'll just use that for
+                # everything.
+                # Note: We maybe want this to not just be a simple update,
+                #       since this will add keys that exist in the provider
+                #       but not in the python-openstacksdk.
+                provider_services.update(
+                    pkg_resources.get_entry_map(provider, "openstack.services")
+                )
+            else:
+                # If something other than a string has been passed in, then
+                # we want to use a different provider for each particular
+                # service.
+                # Note: We maybe want this to protect against adding something
+                #       that doesn't exist in the provider_services dict
+                #       already.
+                for service, dist in provider.items():
+                    ep = pkg_resources.get_entry_info(
+                        dist, "openstack.services", service,
+                    )
+                    if ep is not None:
+                        provider_services[service] = ep
+
+        # Actually load all of the different backends.
+        for ep in provider_services.values():
+            serv = ep.resolve()()
+            serv.set_visibility(None)
+            self._services[serv.service_type] = serv
+
         self.service_names = sorted(self._services.keys())
 
     def __repr__(self):
