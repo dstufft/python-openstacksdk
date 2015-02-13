@@ -57,10 +57,13 @@ try to find it and if that fails, you would create it::
         network = conn.network.create_network({"name": "jenkins"})
 
 """
+import inspect
 import logging
 import sys
 
-from openstack import module_loader
+import pkg_resources
+import six
+
 from openstack import session
 from openstack import transport as xport
 
@@ -71,7 +74,7 @@ class Connection(object):
 
     def __init__(self, transport=None, authenticator=None, preference=None,
                  verify=True, user_agent=None,
-                 auth_plugin=None, **auth_args):
+                 provider="default", **auth_args):
         """Create a context for a connection to a cloud provider.
 
         A connection needs a transport and an authenticator.  The user may pass
@@ -117,26 +120,42 @@ class Connection(object):
             authentication arguments that are used by the authentication
             plugin.
         """
+        self.provider = self._load_provider(provider)
         self.transport = self._create_transport(transport, verify, user_agent)
         self.authenticator = self._create_authenticator(authenticator,
-                                                        auth_plugin,
                                                         **auth_args)
         self.session = session.Session(self.transport, self.authenticator,
                                        preference)
         self._open()
+
+    def _load_provider(self, provider):
+        if isinstance(provider, six.string_types):
+            eps = list(
+                pkg_resources.iter_entry_points(
+                    "openstack.providers",
+                    provider,
+                )
+            )
+            assert len(eps) == 1  # TODO: Better Error
+            ep = eps[0]
+            provider = getattr(ep, "resolve", lambda: ep.load(require=False))()
+
+        if inspect.isclass(provider):
+            provider = provider()
+
+        return provider
 
     def _create_transport(self, transport, verify, user_agent):
         if transport:
             return transport
         return xport.Transport(verify=verify, user_agent=user_agent)
 
-    def _create_authenticator(self, authenticator, auth_plugin, **auth_args):
+    def _create_authenticator(self, authenticator, **auth_args):
         if authenticator:
             return authenticator
-        plugin = module_loader.ModuleLoader().get_auth_plugin(auth_plugin)
-        valid_list = plugin.valid_options
+        valid_list = self.provider.auth.valid_options
         args = dict((n, auth_args[n]) for n in valid_list if n in auth_args)
-        return plugin(**args)
+        return self.provider.auth(**args)
 
     def _open(self):
         """Open the connection.
