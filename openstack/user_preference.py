@@ -78,7 +78,8 @@ class UserPreference(object):
         if provider is None:
             provider = "identity"
 
-        if isinstance(provider, collections.Iterable):
+        if (isinstance(provider, collections.Iterable)
+                and not isinstance(provider, six.string_types)):
             self.provider = MultiProvider(
                 *[self._load_provider(p) for p in provider]
             )
