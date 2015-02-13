@@ -79,7 +79,8 @@ class UserPreference(object):
 
         for name in dir(self.provider):
             value = getattr(self.provider, name)
-            if issubclass(value, service_filter.ServiceFilter):
+            if (inspect.isclass(value)
+                    and issubclass(value, service_filter.ServiceFilter)):
                 serv = value()
                 serv.set_visibility(None)
                 self._services[serv.service_type] = serv
