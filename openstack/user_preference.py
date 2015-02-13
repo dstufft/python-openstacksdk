@@ -51,12 +51,14 @@ The resulting preference print out would look something like::
     service_type=identity,region=zion,version=v3
 """
 
+import collections
 import inspect
 
 import pkg_resources
 import six
 
 from openstack.auth import service_filter
+from openstack.providers import MultiProvider
 from openstack import exceptions
 
 
@@ -76,7 +78,13 @@ class UserPreference(object):
         if provider is None:
             provider = "identity"
 
-        self.provider = self._load_provider(provider)
+        if isinstance(provider, collections.Iterable):
+            self.provider = MultiProvider(
+                *[self._load_provider(p) for p in provider]
+            )
+        else:
+            self.provider = self._load_provider(provider)
+
         self._preferences = {}
         self._services = {}
 
