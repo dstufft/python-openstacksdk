@@ -59,7 +59,6 @@ Creating a new object::
 
 import logging
 
-from openstack import user_preference
 from openstack import utils
 
 
@@ -68,7 +67,7 @@ _logger = logging.getLogger(__name__)
 
 class Session(object):
 
-    def __init__(self, transport, authenticator, preference=None):
+    def __init__(self, transport, authenticator, preference):
         """Create a new object with a transport and authenticator.
 
         Session layer which uses the transport for communication.  The
@@ -99,7 +98,7 @@ class Session(object):
         """
         self.transport = transport
         self.authenticator = authenticator
-        self.preference = preference or user_preference.UserPreference()
+        self.preference = preference
 
     def _request(self, path, method, service=None, authenticate=True,
                  **kwargs):

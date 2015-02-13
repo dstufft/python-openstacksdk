@@ -51,18 +51,13 @@ The resulting preference print out would look something like::
     service_type=identity,region=zion,version=v3
 """
 
+import inspect
+
+import pkg_resources
 import six
 
-from openstack.compute import compute_service
-from openstack.database import database_service
+from openstack.auth import service_filter
 from openstack import exceptions
-from openstack.identity import identity_service
-from openstack.image import image_service
-from openstack.keystore import keystore_service
-from openstack.network import network_service
-from openstack.object_store import object_store_service
-from openstack.orchestration import orchestration_service
-from openstack.telemetry import telemetry_service
 
 
 class UserPreference(object):
@@ -70,7 +65,7 @@ class UserPreference(object):
     ALL = "*"
     """Wildcard service identifier representing all services."""
 
-    def __init__(self):
+    def __init__(self, provider="default"):
         """User preference for each service.
 
         Create a new :class:`~openstack.user_preference.UserPreference`
@@ -78,44 +73,38 @@ class UserPreference(object):
         Services are identified by their service type, e.g.: 'identity',
         'compute', etc.
         """
+        self.provider = self._load_provider(provider)
         self._preferences = {}
         self._services = {}
-        """
-        NOTE(thowe): We should probably do something more clever here rather
-        than brute force create all the services.  Maybe use entry points
-        or something, but I'd like to leave that work for another commit.
-        """
-        serv = compute_service.ComputeService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = database_service.DatabaseService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = identity_service.IdentityService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = image_service.ImageService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = network_service.NetworkService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = object_store_service.ObjectStoreService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = orchestration_service.OrchestrationService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = keystore_service.KeystoreService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
-        serv = telemetry_service.TelemetryService()
-        serv.set_visibility(None)
-        self._services[serv.service_type] = serv
+
+        for name in dir(self.provider):
+            value = getattr(self.provider, name)
+            if issubclass(value, service_filter.ServiceFilter):
+                serv = value()
+                serv.set_visibility(None)
+                self._services[serv.service_type] = serv
+
         self.service_names = sorted(self._services.keys())
 
     def __repr__(self):
         return repr(self._preferences)
+
+    def _load_provider(self, provider):
+        if isinstance(provider, six.string_types):
+            eps = list(
+                pkg_resources.iter_entry_points(
+                    "openstack.providers",
+                    provider,
+                )
+            )
+            assert len(eps) == 1  # TODO: Better Error
+            ep = eps[0]
+            provider = getattr(ep, "resolve", lambda: ep.load(require=False))()
+
+        if inspect.isclass(provider):
+            provider = provider()
+
+        return provider
 
     def get_preference(self, service):
         """Get a service preference.
@@ -192,3 +181,6 @@ class UserPreference(object):
             services = [service]
         for service in services:
             self._get_service(service).set_visibility(visibility)
+
+    def set_provider(self, provider):
+        self._provider = provider

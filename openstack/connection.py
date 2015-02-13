@@ -57,15 +57,12 @@ try to find it and if that fails, you would create it::
         network = conn.network.create_network({"name": "jenkins"})
 
 """
-import inspect
 import logging
 import sys
 
-import pkg_resources
-import six
-
 from openstack import session
 from openstack import transport as xport
+from openstack import user_preference
 
 _logger = logging.getLogger(__name__)
 
@@ -74,7 +71,7 @@ class Connection(object):
 
     def __init__(self, transport=None, authenticator=None, preference=None,
                  verify=True, user_agent=None,
-                 provider="default", **auth_args):
+                 provider=None, **auth_args):
         """Create a context for a connection to a cloud provider.
 
         A connection needs a transport and an authenticator.  The user may pass
@@ -120,30 +117,26 @@ class Connection(object):
             authentication arguments that are used by the authentication
             plugin.
         """
-        self.provider = self._load_provider(provider)
+        if preference is not None and provider is not None:
+            raise TypeError("Cannot specify preference and provider together.")
+
+        if provider is None:
+            provider = "default"
+
+        if preference is None:
+            preference = user_preference.UserPreference(provider=provider)
+
+        self.preference = preference
         self.transport = self._create_transport(transport, verify, user_agent)
         self.authenticator = self._create_authenticator(authenticator,
                                                         **auth_args)
         self.session = session.Session(self.transport, self.authenticator,
-                                       preference)
+                                       self.preference)
         self._open()
 
-    def _load_provider(self, provider):
-        if isinstance(provider, six.string_types):
-            eps = list(
-                pkg_resources.iter_entry_points(
-                    "openstack.providers",
-                    provider,
-                )
-            )
-            assert len(eps) == 1  # TODO: Better Error
-            ep = eps[0]
-            provider = getattr(ep, "resolve", lambda: ep.load(require=False))()
-
-        if inspect.isclass(provider):
-            provider = provider()
-
-        return provider
+    @property
+    def provider(self):
+        return self.preference.provider
 
     def _create_transport(self, transport, verify, user_agent):
         if transport:
