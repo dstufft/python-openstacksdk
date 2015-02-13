@@ -185,6 +185,3 @@ class UserPreference(object):
             services = [service]
         for service in services:
             self._get_service(service).set_visibility(visibility)
-
-    def set_provider(self, provider):
-        self._provider = provider
