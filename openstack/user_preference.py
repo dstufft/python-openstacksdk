@@ -80,8 +80,8 @@ class UserPreference(object):
         self._preferences = {}
         self._services = {}
 
-        for name in dir(self.provider):
-            value = getattr(self.provider, name)
+        for plugin_name in self.provider.plugin_names:
+            value = getattr(self.provider, plugin_name)
             if (inspect.isclass(value)
                     and issubclass(value, service_filter.ServiceFilter)):
                 serv = value()

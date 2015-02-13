@@ -10,6 +10,10 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import inspect
+
+import six
+
 import openstack.auth.identity.discoverable
 import openstack.auth.identity.v2
 import openstack.auth.identity.v3
@@ -23,7 +27,57 @@ import openstack.object_store.object_store_service
 import openstack.orchestration.orchestration_service
 import openstack.telemetry.telemetry_service
 
+from openstack.auth.base import BaseAuthPlugin
+from openstack.auth.service_filter import ServiceFilter
 
+
+class MultiProvider(object):
+
+    def __init__(self, *providers):
+        self.providers = providers
+
+    def __getattr__(self, name):
+        for provider in self.providers:
+            item = getattr(provider, name, None)
+            if item is not None:
+                return item
+
+        raise AttributeError(
+            "'{0}' object has no attribute '{1}'".format(
+                self.__class__.__name__,
+                name,
+            ),
+        )
+
+    @property
+    def plugin_names(self):
+        all_names = set()
+        for provider in self.providers:
+            all_names |= provider.plugin_names
+        return all_names
+
+
+class ProviderMeta(type):
+
+    def __new__(cls, name, bases, attrs):
+        plugin_names = set()
+
+        # Load all of the plugin names from our bases
+        for base in bases:
+            plugin_names |= getattr(base, "plugin_names", set())
+
+        # Load all of the plugin names from this class
+        for name, value in attrs.items():
+            if (inspect.isclass(value)
+                    and issubclass(value, (BaseAuthPlugin, ServiceFilter))):
+                plugin_names.add(name)
+
+        attrs["plugin_names"] = plugin_names
+
+        return super(ProviderMeta, cls).__new__(cls, name, bases, attrs)
+
+
+@six.add_metaclass(ProviderMeta)
 class BaseProvider(object):
     auth = openstack.auth.identity.discoverable.Auth
     compute = openstack.compute.compute_service.ComputeService
