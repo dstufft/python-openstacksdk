@@ -65,7 +65,7 @@ class UserPreference(object):
     ALL = "*"
     """Wildcard service identifier representing all services."""
 
-    def __init__(self, provider="default"):
+    def __init__(self, provider=None):
         """User preference for each service.
 
         Create a new :class:`~openstack.user_preference.UserPreference`
@@ -73,6 +73,9 @@ class UserPreference(object):
         Services are identified by their service type, e.g.: 'identity',
         'compute', etc.
         """
+        if provider is None:
+            provider = "identity"
+
         self.provider = self._load_provider(provider)
         self._preferences = {}
         self._services = {}

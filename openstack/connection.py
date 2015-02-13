@@ -120,9 +120,6 @@ class Connection(object):
         if preference is not None and provider is not None:
             raise TypeError("Cannot specify preference and provider together.")
 
-        if provider is None:
-            provider = "default"
-
         if preference is None:
             preference = user_preference.UserPreference(provider=provider)
 

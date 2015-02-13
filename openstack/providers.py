@@ -27,7 +27,7 @@ class BaseProvider(object):
     telemetry = openstack.telemetry.telemetry_service.TelemetryService
 
 
-class Default(BaseProvider):
+class Identity(BaseProvider):
     pass
 
 
